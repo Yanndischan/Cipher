@@ -95,27 +95,7 @@ def get_usdc_balance(address=None):
                 funder_addr = Web3.to_checksum_address(config.PROXY_ADDRESS)
             except Exception:
                 funder_addr = config.PROXY_ADDRESS
-                
-        _client = _C(
-            host=config.CLOB_HOST,
-            chain_id=config.CHAIN_ID,
-            key=config.PRIVATE_KEY,
-            creds=_A(
-                api_key=config.API_KEY,
-                api_secret=config.API_SECRET,
-                api_passphrase=config.API_PASSPHRASE,
-            ),
-            signature_type=2,
-            funder=funder_addr,
-        )
-        result = _client.get_balance_allowance(
-            params=BalanceAllowanceParams(asset_type=AssetType.COLLATERAL)
-        )
-        raw = float(result.get("balance", 0))
-        return raw / 1e6
-    except Exception as e:
-        log.error(f"Balance fetch failed: {e}")
-        return None
+           
 
 
 def get_metamask_balance():
@@ -182,28 +162,6 @@ def send_usdc(to_address: str, amount_usdc: float) -> dict:
         balance_raw = usdc.functions.balanceOf(Web3.to_checksum_address(from_address)).call()
         balance_usdc = balance_raw / (10 ** decimals)
 
-        if raw_amount > balance_raw:
-            return {
-                "ok"   : False,
-                "error": f"Insufficient USDC. Wallet has ${balance_usdc:.2f}, tried to send ${amount_usdc:.2f}"
-            }
-
-        # Safety: check POL for gas
-        pol_balance = get_pol_balance(from_address)
-        if pol_balance is not None and float(pol_balance) < 0.001:
-            return {
-                "ok"   : False,
-                "error": f"Insufficient POL for gas. Have {float(pol_balance):.4f} POL, need ~0.001"
-            }
-
-        # Build transaction
-        nonce    = w3.eth.get_transaction_count(Web3.to_checksum_address(from_address))
-        gas_price = w3.eth.gas_price
-
-        tx = usdc.functions.transfer(to_checksum, raw_amount).build_transaction({
-            "from"    : Web3.to_checksum_address(from_address),
-            "nonce"   : nonce,
-            "gasPrice": gas_price,
             "chainId" : config.CHAIN_ID,
         })
 
@@ -247,24 +205,7 @@ def check_usdc_allowance():
     return True
 
 
-def init_live_client():
-    global live_client, live_initialized
 
-    if live_initialized:
-        return live_client is not None
-
-    if not config.PRIVATE_KEY:
-        log.warning("LIVE: No private key found in .env")
-        live_initialized = True
-        return False
-
-    try:
-        from py_clob_client_v2.client import ClobClient
-        from py_clob_client_v2.clob_types import ApiCreds
-        creds = ApiCreds(
-            api_key=config.API_KEY,
-            api_secret=config.API_SECRET,
-            api_passphrase=config.API_PASSPHRASE,
         )
         
         funder_addr = None
@@ -316,13 +257,6 @@ def check_live_safety():
 # =======================================================
 # STATE (guarded by state_lock)
 # =======================================================
-paper_balance      = config.PAPER_BALANCE
-open_positions     = []
-closed_trades      = []
-trade_counter      = 0
-state_lock         = Lock()
-_pending_live      = {}   # symbol -> count of in-flight live orders (cap reservation)
-_orphan_orders     = []   # orders whose cancel failed: kept until confirmed gone or filled
 
 
 class UnfilledOrderError(RuntimeError):
