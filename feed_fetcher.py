@@ -131,7 +131,23 @@ def get_trend(symbol):
 
     if early_avg == 0:
         return "UNKNOWN", 0.0
-erance else None
+
+    change = ((late_avg - early_avg) / early_avg) * 100
+
+    if change > config.TREND_FLAT_BAND:
+        return "UP", change
+    if change < -config.TREND_FLAT_BAND:
+        return "DOWN", change
+    return "FLAT", change
+
+def get_price_at_timestamp(symbol, target_ts, tolerance=10):
+    """Return the Binance price closest to target_ts (within tolerance seconds)."""
+    with history_lock:
+        history = list(price_history[symbol])
+    if not history:
+        return None
+    closest = min(history, key=lambda x: abs(x[0] - target_ts))
+    return closest[1] if abs(closest[0] - target_ts) <= tolerance else None
 
 def trend_confirms(symbol, direction):
     """Return (confirmed, trend, strength). FLAT/UNKNOWN always confirm."""
@@ -220,7 +236,23 @@ def fetch_market_by_slug(slug):
     except Exception:
         return None
 
-def 
+def get_clob_midpoint(token_id):
+    """Fetch CLOB midpoint with 2s cache to reduce REST overhead."""
+    if not token_id:
+        return None
+
+    now = time.time()
+    cached = _midpoint_cache.get(token_id)
+    if cached and now - cached[1] < 2.0:
+        return cached[0]
+
+    try:
+        resp = api_session.get(f"{config.CLOB_HOST}/midpoint", params={"token_id": token_id}, timeout=2)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data and "mid" in data:
+                price = float(data["mid"])
+                _midpoint_cache[token_id] = (price, now)
                 return price
         return None
     except Exception:
@@ -277,6 +309,23 @@ def get_market_price(symbol, interval):
 
 _binance_open_cache = {}
 
+def get_exact_binance_open(symbol, interval_sec, target_ts):
+    """Fetch exact kline open price from Binance REST API, with caching."""
+    cache_key = (symbol, interval_sec, target_ts)
+    if cache_key in _binance_open_cache:
+        return _binance_open_cache[cache_key]
+
+    interval_str = next((k for k, v in config.INTERVALS.items() if v == interval_sec), "5m")
+    sym = f"{symbol.upper()}USDT"
+    try:
+        resp = api_session.get(
+            "https://api.binance.com/api/v3/klines",
+            params={
+                "symbol": sym,
+                "interval": interval_str,
+                "startTime": target_ts * 1000,
+                "limit": 1
+            },
             timeout=3
         )
         if resp.status_code == 200:
