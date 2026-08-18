@@ -81,28 +81,7 @@ def run():
     while restart_count < MAX_RESTARTS:
         error_msg = "unknown"
 
-        try:
-            if first_run:
-                print(f"[Supervisor] Starting bot (first run)...")
-                first_run = False
-            else:
-                print(f"[Supervisor] Starting bot (attempt {restart_count + 1})...")
-
-            result = subprocess.run(
-                [sys.executable, "feed_fetcher.py"],
-                cwd=os.path.dirname(os.path.abspath(__file__)) or ".",
-            )
-
-            if result.returncode == 0:
-                print("[Supervisor] Bot exited cleanly.")
-                notify("🟢 <b>Bot exited cleanly</b>", silent=False)
-                break
-
-            if result.returncode == 42:
-                print("[Supervisor] Emergency shutdown — not restarting.")
-                notify("🚨 <b>Emergency shutdown</b>\nSupervisor stopped. Use terminal to restart.", silent=False)
-                break
-
+   
             if result.returncode == 43:
                 print("[Supervisor] Restart requested via Telegram.")
                 continue
